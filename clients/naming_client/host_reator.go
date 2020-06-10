@@ -3,9 +3,9 @@ package naming_client
 import (
 	"encoding/json"
 	"github.com/nacos-group/nacos-sdk-go/clients/cache"
+	log "github.com/nacos-group/nacos-sdk-go/common/logger"
 	"github.com/nacos-group/nacos-sdk-go/model"
 	"github.com/nacos-group/nacos-sdk-go/utils"
-	"log"
 	"reflect"
 	"time"
 )

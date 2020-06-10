@@ -1,7 +1,7 @@
 package http_agent
 
 import (
-	"log"
+	log "github.com/nacos-group/nacos-sdk-go/common/logger"
 	"net/http"
 	"strings"
 	"time"

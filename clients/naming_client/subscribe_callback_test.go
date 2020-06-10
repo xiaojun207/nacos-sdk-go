@@ -2,11 +2,11 @@ package naming_client
 
 import (
 	"fmt"
+	log "github.com/nacos-group/nacos-sdk-go/common/logger"
 	"github.com/nacos-group/nacos-sdk-go/model"
 	"github.com/nacos-group/nacos-sdk-go/utils"
 	"github.com/nacos-group/nacos-sdk-go/vo"
 	"github.com/stretchr/testify/assert"
-	"log"
 	"strings"
 	"testing"
 	"time"

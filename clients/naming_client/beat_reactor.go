@@ -3,10 +3,10 @@ package naming_client
 import (
 	"github.com/nacos-group/nacos-sdk-go/clients/cache"
 	"github.com/nacos-group/nacos-sdk-go/common/constant"
+	log "github.com/nacos-group/nacos-sdk-go/common/logger"
 	"github.com/nacos-group/nacos-sdk-go/model"
 	"github.com/nacos-group/nacos-sdk-go/utils"
 	nsema "github.com/toolkits/concurrent/semaphore"
-	"log"
 	"strconv"
 	"time"
 )

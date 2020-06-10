@@ -2,8 +2,8 @@ package naming_client
 
 import (
 	"encoding/json"
+	log "github.com/nacos-group/nacos-sdk-go/common/logger"
 	"github.com/nacos-group/nacos-sdk-go/utils"
-	"log"
 	"math/rand"
 	"net"
 	"strconv"

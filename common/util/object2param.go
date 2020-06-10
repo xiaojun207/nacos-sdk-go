@@ -2,7 +2,7 @@ package util
 
 import (
 	"encoding/json"
-	"log"
+	log "github.com/nacos-group/nacos-sdk-go/common/logger"
 	"reflect"
 	"strconv"
 	"strings"

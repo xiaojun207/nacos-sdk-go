@@ -2,9 +2,9 @@ package http_agent
 
 import (
 	"github.com/go-errors/errors"
+	log "github.com/nacos-group/nacos-sdk-go/common/logger"
 	"github.com/nacos-group/nacos-sdk-go/utils"
 	"io/ioutil"
-	"log"
 	"net/http"
 )
 

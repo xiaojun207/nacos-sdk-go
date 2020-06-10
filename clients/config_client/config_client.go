@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/kms"
-	"log"
+	log "github.com/nacos-group/nacos-sdk-go/common/logger"
 	"os"
 	"strconv"
 	"strings"
