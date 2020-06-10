@@ -12,6 +12,7 @@ import (
 	"github.com/nacos-group/nacos-sdk-go/model"
 	"github.com/nacos-group/nacos-sdk-go/utils"
 	"github.com/nacos-group/nacos-sdk-go/vo"
+	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/kms"
 	"log"
@@ -200,6 +201,7 @@ func (client *ConfigClient) ListenConfig(param vo.ConfigParam) (err error) {
 		for {
 			clientConfig, _ := client.GetClientConfig()
 			client.listenConfigTask(clientConfig, param)
+			time.Sleep(time.Duration(clientConfig.ListenInterval) * time.Millisecond)
 		}
 	}()
 
