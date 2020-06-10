@@ -74,3 +74,7 @@ func Fatalf(format string, v ...interface{}) {
 func Print(v ...interface{}) {
 	nacosLogger.Print(v)
 }
+
+func Panicf(format string, v ...interface{}) {
+	nacosLogger.Panicf(format, v)
+}
