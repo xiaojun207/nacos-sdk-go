@@ -1,80 +1,140 @@
+/*
+ * Copyright 1999-2020 Alibaba Group Holding Ltd.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package logger
 
 import (
-	"github.com/lestrrat/go-file-rotatelogs"
-	"log"
+	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
+
+	rotatelogs "github.com/lestrrat/go-file-rotatelogs"
+	"github.com/nacos-group/nacos-sdk-go/common/file"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-var nacosLogger *log.Logger
+var (
+	logger Logger
+)
+
+var levelMap = map[string]zapcore.Level{
+	"debug": zapcore.DebugLevel,
+	"info":  zapcore.InfoLevel,
+	"warn":  zapcore.WarnLevel,
+	"error": zapcore.ErrorLevel,
+}
+
+type Config struct {
+	Level        string
+	OutputPath   string
+	RotationTime string
+	MaxAge       int64
+}
+
+type NacosLogger struct {
+	Logger
+}
+
+// Logger is the interface for Logger types
+type Logger interface {
+	Info(args ...interface{})
+	Warn(args ...interface{})
+	Error(args ...interface{})
+	Debug(args ...interface{})
+
+	Infof(fmt string, args ...interface{})
+	Warnf(fmt string, args ...interface{})
+	Errorf(fmt string, args ...interface{})
+	Debugf(fmt string, args ...interface{})
+}
 
 func init() {
-	nacosLogger = log.New(os.Stderr, "nacos-", log.LstdFlags)
+	zapLoggerConfig := zap.NewDevelopmentConfig()
+	zapLoggerEncoderConfig := zapcore.EncoderConfig{
+		TimeKey:        "time",
+		LevelKey:       "level",
+		NameKey:        "logger",
+		CallerKey:      "caller",
+		MessageKey:     "message",
+		StacktraceKey:  "stacktrace",
+		EncodeLevel:    zapcore.CapitalColorLevelEncoder,
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
+	}
+	zapLoggerConfig.EncoderConfig = zapLoggerEncoderConfig
+	zapLogger, _ := zapLoggerConfig.Build(zap.AddCallerSkip(1))
+	logger = &NacosLogger{zapLogger.Sugar()}
 }
 
-func MkdirIfNecessary(createDir string) error {
-	var path string
-	var err error
-	if os.IsPathSeparator('\\') { //前边的判断是否是系统的分隔符
-		path = "\\"
-	} else {
-		path = "/"
-	}
-
-	s := strings.Split(createDir, path)
-	startIndex := 0
-	dir := ""
-	if s[0] == "" {
-		startIndex = 1
-	} else {
-		dir, _ = os.Getwd() //当前的目录
-	}
-	for i := startIndex; i < len(s); i++ {
-		d := dir + path + strings.Join(s[startIndex:i+1], path)
-		if _, e := os.Stat(d); os.IsNotExist(e) {
-			err = os.Mkdir(d, os.ModePerm) //在当前目录下生成md目录
-			if err != nil {
-				break
-			}
-		}
-	}
-	return err
-}
-
-func InitLog(logDir string) error {
-	err := MkdirIfNecessary(logDir)
+func InitLogger(config Config) (err error) {
+	logLevel := getLogLevel(config.Level)
+	encoder := getEncoder()
+	writer, err := getWriter(config.OutputPath, config.RotationTime, config.MaxAge)
 	if err != nil {
-		return err
+		return
 	}
-	logDir = logDir + string(os.PathSeparator)
-	rl, err := rotatelogs.New(filepath.Join(logDir, "nacos-sdk.log-%Y%m%d%H%M"), rotatelogs.WithRotationTime(time.Hour), rotatelogs.WithMaxAge(48*time.Hour), rotatelogs.WithLinkName(filepath.Join(logDir, "nacos-sdk.log")))
+	core := zapcore.NewCore(zapcore.NewConsoleEncoder(encoder), zapcore.AddSync(writer), logLevel)
+	zaplogger := zap.New(core, zap.AddCallerSkip(1))
+	logger = &NacosLogger{zaplogger.Sugar()}
+	return
+}
+
+func getLogLevel(level string) zapcore.Level {
+	if zapLevel, ok := levelMap[level]; ok {
+		return zapLevel
+	}
+	return zapcore.InfoLevel
+}
+
+func getEncoder() zapcore.EncoderConfig {
+	return zapcore.EncoderConfig{
+		TimeKey:        "time",
+		LevelKey:       "level",
+		NameKey:        "logger",
+		CallerKey:      "caller",
+		MessageKey:     "message",
+		StacktraceKey:  "stacktrace",
+		EncodeLevel:    zapcore.CapitalColorLevelEncoder,
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
+	}
+}
+
+func getWriter(outputPath string, rotateTime string, maxAge int64) (writer io.Writer, err error) {
+	err = file.MkdirIfNecessary(outputPath)
 	if err != nil {
-		return err
+		return
 	}
-	nacosLogger.SetOutput(rl)
-	nacosLogger.SetFlags(log.LstdFlags)
-	return nil
+	outputPath = outputPath + string(os.PathSeparator)
+	rotateDuration, err := time.ParseDuration(rotateTime)
+	writer, err = rotatelogs.New(filepath.Join(outputPath, "nacos-sdk.log-%Y%m%d%H%M"),
+		rotatelogs.WithRotationTime(rotateDuration), rotatelogs.WithMaxAge(time.Duration(maxAge)*rotateDuration),
+		rotatelogs.WithLinkName(filepath.Join(outputPath, "nacos-sdk.log")))
+	return
 }
 
-func Printf(format string, v ...interface{}) {
-	nacosLogger.Printf(format, v)
+//SetLogger sets logger for sdk
+func SetLogger(log Logger) {
+	logger = log
 }
 
-func Println(v ...interface{}) {
-	nacosLogger.Println(v)
-}
-
-func Fatalf(format string, v ...interface{}) {
-	nacosLogger.Fatalf(format, v)
-}
-
-func Print(v ...interface{}) {
-	nacosLogger.Print(v)
-}
-
-func Panicf(format string, v ...interface{}) {
-	nacosLogger.Panicf(format, v)
+func GetLogger() Logger {
+	return logger
 }
