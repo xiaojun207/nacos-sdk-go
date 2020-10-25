@@ -21,6 +21,7 @@ import (
 	"errors"
 	"io/ioutil"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -150,12 +151,20 @@ func (ac *AuthClient) login(server constant.ServerConfig) (bool, error) {
 			return false, err
 		}
 
+		logger.Info("nacoslogin.result", result)
+		logger.Info("nacoslogin.stack：", stack())
 		if val, ok := result[constant.KEY_ACCESS_TOKEN]; ok {
 			ac.accessToken.Store(val)
 			ac.tokenTtl = int64(result[constant.KEY_TOKEN_TTL].(float64))
 			ac.tokenRefreshWindow = ac.tokenTtl / 10
+			logger.Info("nacoslogin.tokenTtl,tokenRefreshWindow", ac.tokenTtl, ac.tokenRefreshWindow)
 		}
 	}
 	return true, nil
 
+}
+
+func stack() string {
+	var buf [2 << 10]byte
+	return string(buf[:runtime.Stack(buf[:], true)])
 }
