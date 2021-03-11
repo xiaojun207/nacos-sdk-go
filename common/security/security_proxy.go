@@ -152,8 +152,8 @@ func (ac *AuthClient) login(server constant.ServerConfig) (bool, error) {
 			return false, err
 		}
 
-		fmt.Println("nacoslogin.result", result)
-		fmt.Println("nacoslogin.stack：", stack())
+		//fmt.Println("nacoslogin.result", result)
+		//fmt.Println("nacoslogin.stack：", stack())
 		if val, ok := result[constant.KEY_ACCESS_TOKEN]; ok {
 			ac.accessToken.Store(val)
 			ac.tokenTtl = int64(result[constant.KEY_TOKEN_TTL].(float64))
