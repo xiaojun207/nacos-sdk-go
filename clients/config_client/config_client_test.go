@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -34,6 +35,8 @@ import (
 	"github.com/nacos-group/nacos-sdk-go/vo"
 	"github.com/stretchr/testify/assert"
 )
+
+var goVersion = runtime.Version()
 
 var clientConfigTest = constant.ClientConfig{
 	TimeoutMs:      10000,
@@ -54,24 +57,43 @@ var serverConfigTest = constant.ServerConfig{
 	IpAddr:      "console.nacos.io",
 }
 
+var serverConfigWithOptions = constant.NewServerConfig("console.nacos.io", 80, constant.WithContextPath("/nacos"))
+
+var clientConfigWithOptions = constant.NewClientConfig(
+	constant.WithTimeoutMs(10*1000),
+	constant.WithBeatInterval(2*1000),
+	constant.WithNotLoadCacheAtStart(true),
+)
+
+var (
+	dataIdKey                         = goVersion + "dataId"
+	configNoChangeKey                 = goVersion + "ConfigNoChange"
+	multipleClientsKey                = goVersion + "MultipleClients"
+	multipleClientsMultipleConfigsKey = goVersion + "MultipleClientsMultipleConfig"
+	cancelOneKey                      = goVersion + "CancelOne"
+	cancelOne1Key                     = goVersion + "CancelOne1"
+	cancelListenConfigKey             = goVersion + "cancel_listen_config"
+	specialSymbolKey                  = goVersion + "special_symbol"
+)
+
 var configParamMapTest = map[string]string{
-	"dataId": "dataId",
+	"dataId": dataIdKey,
 	"group":  "group",
 }
 
 var configParamTest = vo.ConfigParam{
-	DataId: "dataId",
+	DataId: dataIdKey,
 	Group:  "group",
 }
 
 var localConfigTest = vo.ConfigParam{
-	DataId:  "dataId",
+	DataId:  dataIdKey,
 	Group:   "group",
 	Content: "content",
 }
 
 var localConfigMapTest = map[string]string{
-	"dataId":  "dataId",
+	"dataId":  dataIdKey,
 	"group":   "group",
 	"content": "content",
 }
@@ -88,16 +110,16 @@ var serverConfigsTest = []constant.ServerConfig{serverConfigTest}
 
 var httpAgentTest = mock.MockIHttpAgent{}
 
-func cretateConfigClientTest() ConfigClient {
+func createConfigClientTest() ConfigClient {
 	nc := nacos_client.NacosClient{}
-	nc.SetServerConfig([]constant.ServerConfig{serverConfigTest})
-	nc.SetClientConfig(clientConfigTest)
+	nc.SetServerConfig([]constant.ServerConfig{*serverConfigWithOptions})
+	nc.SetClientConfig(*clientConfigWithOptions)
 	nc.SetHttpAgent(&http_agent.HttpAgent{})
 	client, _ := NewConfigClient(&nc)
 	return client
 }
 
-func cretateConfigClientTestWithTenant() ConfigClient {
+func createConfigClientTestWithTenant() ConfigClient {
 	nc := nacos_client.NacosClient{}
 	nc.SetServerConfig([]constant.ServerConfig{serverConfigTest})
 	nc.SetClientConfig(clientConfigTestWithTenant)
@@ -106,7 +128,7 @@ func cretateConfigClientTestWithTenant() ConfigClient {
 	return client
 }
 
-func cretateConfigClientHttpTest(mockHttpAgent http_agent.IHttpAgent) ConfigClient {
+func createConfigClientHttpTest(mockHttpAgent http_agent.IHttpAgent) ConfigClient {
 	nc := nacos_client.NacosClient{}
 	nc.SetServerConfig([]constant.ServerConfig{serverConfigTest})
 	nc.SetClientConfig(clientConfigTest)
@@ -115,7 +137,7 @@ func cretateConfigClientHttpTest(mockHttpAgent http_agent.IHttpAgent) ConfigClie
 	return client
 }
 
-func cretateConfigClientHttpTestWithTenant(mockHttpAgent http_agent.IHttpAgent) ConfigClient {
+func createConfigClientHttpTestWithTenant(mockHttpAgent http_agent.IHttpAgent) ConfigClient {
 	nc := nacos_client.NacosClient{}
 	nc.SetServerConfig([]constant.ServerConfig{serverConfigTest})
 	nc.SetClientConfig(clientConfigTestWithTenant)
@@ -126,9 +148,9 @@ func cretateConfigClientHttpTestWithTenant(mockHttpAgent http_agent.IHttpAgent) 
 
 func Test_GetConfig(t *testing.T) {
 
-	client := cretateConfigClientTest()
+	client := createConfigClientTest()
 	success, err := client.PublishConfig(vo.ConfigParam{
-		DataId:  "dataId",
+		DataId:  dataIdKey,
 		Group:   "group",
 		Content: "hello world!222222"})
 
@@ -136,7 +158,7 @@ func Test_GetConfig(t *testing.T) {
 	assert.True(t, success)
 
 	content, err := client.GetConfig(vo.ConfigParam{
-		DataId: "dataId",
+		DataId: dataIdKey,
 		Group:  "group"})
 
 	assert.Nil(t, err)
@@ -144,24 +166,27 @@ func Test_GetConfig(t *testing.T) {
 }
 
 func Test_SearchConfig(t *testing.T) {
-	client := cretateConfigClientTest()
+	client := createConfigClientTest()
+	client.PublishConfig(vo.ConfigParam{
+		DataId:  dataIdKey,
+		Group:   "groDEFAULT_GROUPup",
+		Content: "hello world!222222"})
 	configPage, err := client.SearchConfig(vo.SearchConfigParm{
 		Search:   "accurate",
-		DataId:   "",
-		Group:    "DEFAULT_GROUP",
+		DataId:   dataIdKey,
+		Group:    "groDEFAULT_GROUPup",
 		PageNo:   1,
 		PageSize: 10,
 	})
 	assert.Nil(t, err)
 	assert.NotEmpty(t, configPage)
-	assert.NotEmpty(t, configPage.PageItems)
 }
 
 func Test_GetConfigWithErrorResponse_401(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	mockHttpAgent := mock.NewMockIHttpAgent(controller)
-	client := cretateConfigClientHttpTest(mockHttpAgent)
+	client := createConfigClientHttpTest(mockHttpAgent)
 	mockHttpAgent.EXPECT().Request(gomock.Eq(http.MethodGet),
 		gomock.Eq("http://console.nacos.io:80/nacos/v1/cs/configs"),
 		gomock.AssignableToTypeOf(http.Header{}),
@@ -177,7 +202,7 @@ func Test_GetConfigWithErrorResponse_404(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	mockHttpAgent := mock.NewMockIHttpAgent(controller)
-	client := cretateConfigClientHttpTest(mockHttpAgent)
+	client := createConfigClientHttpTest(mockHttpAgent)
 	mockHttpAgent.EXPECT().Request(gomock.Eq(http.MethodGet),
 		gomock.Eq("http://console.nacos.io:80/nacos/v1/cs/configs"),
 		gomock.AssignableToTypeOf(http.Header{}),
@@ -194,7 +219,7 @@ func Test_GetConfigWithErrorResponse_403(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	mockHttpAgent := mock.NewMockIHttpAgent(controller)
-	client := cretateConfigClientHttpTest(mockHttpAgent)
+	client := createConfigClientHttpTest(mockHttpAgent)
 	mockHttpAgent.EXPECT().Request(gomock.Eq(http.MethodGet),
 		gomock.Eq("http://console.nacos.io:80/nacos/v1/cs/configs"),
 		gomock.AssignableToTypeOf(http.Header{}),
@@ -212,7 +237,7 @@ func Test_GetConfigWithCache(t *testing.T) {
 	defer controller.Finish()
 
 	mockHttpAgent := mock.NewMockIHttpAgent(controller)
-	client := cretateConfigClientHttpTest(mockHttpAgent)
+	client := createConfigClientHttpTest(mockHttpAgent)
 
 	mockHttpAgent.EXPECT().Request(gomock.Eq(http.MethodGet),
 		gomock.Eq("http://console.nacos.io:80/nacos/v1/cs/configs"),
@@ -238,7 +263,7 @@ func Test_GetConfigWithCache(t *testing.T) {
 // PublishConfig
 
 func Test_PublishConfigWithoutDataId(t *testing.T) {
-	client := cretateConfigClientTest()
+	client := createConfigClientTest()
 	_, err := client.PublishConfig(vo.ConfigParam{
 		DataId:  "",
 		Group:   "group",
@@ -248,9 +273,9 @@ func Test_PublishConfigWithoutDataId(t *testing.T) {
 }
 
 func Test_PublishConfigWithoutGroup(t *testing.T) {
-	client := cretateConfigClientTest()
+	client := createConfigClientTest()
 	_, err := client.PublishConfig(vo.ConfigParam{
-		DataId:  "dataId",
+		DataId:  dataIdKey,
 		Group:   "",
 		Content: "content",
 	})
@@ -258,9 +283,9 @@ func Test_PublishConfigWithoutGroup(t *testing.T) {
 }
 
 func Test_PublishConfigWithoutContent(t *testing.T) {
-	client := cretateConfigClientTest()
+	client := createConfigClientTest()
 	_, err := client.PublishConfig(vo.ConfigParam{
-		DataId:  "dataId",
+		DataId:  dataIdKey,
 		Group:   "group",
 		Content: "",
 	})
@@ -269,10 +294,10 @@ func Test_PublishConfigWithoutContent(t *testing.T) {
 
 func Test_PublishConfig(t *testing.T) {
 
-	client := cretateConfigClientTest()
+	client := createConfigClientTest()
 
 	success, err := client.PublishConfig(vo.ConfigParam{
-		DataId:  "dataId",
+		DataId:  dataIdKey,
 		Group:   "group",
 		Content: "hello world2!"})
 
@@ -285,7 +310,7 @@ func Test_PublishConfigWithErrorResponse(t *testing.T) {
 	defer controller.Finish()
 
 	mockHttpAgent := mock.NewMockIHttpAgent(controller)
-	client := cretateConfigClientHttpTest(mockHttpAgent)
+	client := createConfigClientHttpTest(mockHttpAgent)
 	mockHttpAgent.EXPECT().Request(gomock.Eq(http.MethodPost),
 		gomock.Eq("http://console.nacos.io:80/nacos/v1/cs/configs"),
 		gomock.AssignableToTypeOf(http.Header{}),
@@ -302,7 +327,7 @@ func Test_PublishConfigWithErrorResponse_200(t *testing.T) {
 	defer controller.Finish()
 
 	mockHttpAgent := mock.NewMockIHttpAgent(controller)
-	client := cretateConfigClientHttpTest(mockHttpAgent)
+	client := createConfigClientHttpTest(mockHttpAgent)
 	mockHttpAgent.EXPECT().Request(gomock.Eq(http.MethodPost),
 		gomock.Eq("http://console.nacos.io:80/nacos/v1/cs/configs"),
 		gomock.AssignableToTypeOf(http.Header{}),
@@ -318,10 +343,10 @@ func Test_PublishConfigWithErrorResponse_200(t *testing.T) {
 
 func Test_DeleteConfig(t *testing.T) {
 
-	client := cretateConfigClientTest()
+	client := createConfigClientTest()
 
 	success, err := client.PublishConfig(vo.ConfigParam{
-		DataId:  "dataId",
+		DataId:  dataIdKey,
 		Group:   "group",
 		Content: "hello world!"})
 
@@ -329,7 +354,7 @@ func Test_DeleteConfig(t *testing.T) {
 	assert.True(t, success)
 
 	success, err = client.DeleteConfig(vo.ConfigParam{
-		DataId: "dataId",
+		DataId: dataIdKey,
 		Group:  "group"})
 
 	assert.Nil(t, err)
@@ -341,7 +366,7 @@ func Test_DeleteConfigWithErrorResponse_200(t *testing.T) {
 	defer controller.Finish()
 
 	mockHttpAgent := mock.NewMockIHttpAgent(controller)
-	client := cretateConfigClientHttpTest(mockHttpAgent)
+	client := createConfigClientHttpTest(mockHttpAgent)
 
 	mockHttpAgent.EXPECT().Request(gomock.Eq(http.MethodDelete),
 		gomock.Eq("http://console.nacos.io:80/nacos/v1/cs/configs"),
@@ -359,7 +384,7 @@ func Test_DeleteConfigWithErrorResponse_401(t *testing.T) {
 	defer controller.Finish()
 
 	mockHttpAgent := mock.NewMockIHttpAgent(controller)
-	client := cretateConfigClientHttpTest(mockHttpAgent)
+	client := createConfigClientHttpTest(mockHttpAgent)
 
 	mockHttpAgent.EXPECT().Request(gomock.Eq(http.MethodDelete),
 		gomock.Eq("http://console.nacos.io:80/nacos/v1/cs/configs"),
@@ -373,7 +398,7 @@ func Test_DeleteConfigWithErrorResponse_401(t *testing.T) {
 }
 
 func Test_DeleteConfigWithoutDataId(t *testing.T) {
-	client := cretateConfigClientTest()
+	client := createConfigClientTest()
 	success, err := client.DeleteConfig(vo.ConfigParam{
 		DataId: "",
 		Group:  "group",
@@ -383,9 +408,9 @@ func Test_DeleteConfigWithoutDataId(t *testing.T) {
 }
 
 func Test_DeleteConfigWithoutGroup(t *testing.T) {
-	client := cretateConfigClientTest()
+	client := createConfigClientTest()
 	success, err := client.DeleteConfig(vo.ConfigParam{
-		DataId: "dataId",
+		DataId: dataIdKey,
 		Group:  "",
 	})
 	assert.NotNil(t, err)
@@ -396,7 +421,7 @@ func Test_DeleteConfigWithoutGroup(t *testing.T) {
 func TestListen(t *testing.T) {
 	// ListenConfig
 	t.Run("TestListenConfig", func(t *testing.T) {
-		client := cretateConfigClientTest()
+		client := createConfigClientTest()
 		key := util.GetConfigCacheKey(localConfigTest.DataId, localConfigTest.Group, clientConfigTest.NamespaceId)
 		cache.WriteConfigToFile(key, client.configCacheDir, "")
 		var err error
@@ -438,14 +463,14 @@ func TestListen(t *testing.T) {
 			OnChange: func(namespace, group, dataId, data string) {
 			},
 		}
-		client := cretateConfigClientTest()
+		client := createConfigClientTest()
 		err := client.ListenConfig(listenConfigParam)
 		assert.Error(t, err)
 	})
 	// ListenConfig no change
 	t.Run("TestListenConfigNoChange", func(t *testing.T) {
-		client := cretateConfigClientTest()
-		key := util.GetConfigCacheKey("ConfigNoChange", localConfigTest.Group, clientConfigTest.NamespaceId)
+		client := createConfigClientTest()
+		key := util.GetConfigCacheKey(configNoChangeKey, localConfigTest.Group, clientConfigTest.NamespaceId)
 		cache.WriteConfigToFile(key, client.configCacheDir, localConfigTest.Content)
 		var err error
 		var success bool
@@ -453,7 +478,7 @@ func TestListen(t *testing.T) {
 
 		go func() {
 			err = client.ListenConfig(vo.ConfigParam{
-				DataId: "ConfigNoChange",
+				DataId: configNoChangeKey,
 				Group:  localConfigTest.Group,
 				OnChange: func(namespace, group, dataId, data string) {
 					content = "data"
@@ -465,7 +490,7 @@ func TestListen(t *testing.T) {
 		time.Sleep(2 * time.Second)
 
 		success, err = client.PublishConfig(vo.ConfigParam{
-			DataId:  "ConfigNoChange",
+			DataId:  configNoChangeKey,
 			Group:   localConfigTest.Group,
 			Content: localConfigTest.Content})
 
@@ -477,23 +502,23 @@ func TestListen(t *testing.T) {
 	t.Run("TestListenConfigWithMultipleClients", func(t *testing.T) {
 		ch := make(chan string)
 		listenConfigParam := vo.ConfigParam{
-			DataId: "MultipleClients",
+			DataId: multipleClientsKey,
 			Group:  localConfigTest.Group,
 			OnChange: func(namespace, group, dataId, data string) {
 				fmt.Println("group:" + group + ", dataId:" + dataId + ", data:" + data)
 				ch <- data
 			},
 		}
-		client := cretateConfigClientTest()
+		client := createConfigClientTest()
 		key := util.GetConfigCacheKey(listenConfigParam.DataId, listenConfigParam.Group, clientConfigTest.NamespaceId)
 		cache.WriteConfigToFile(key, client.configCacheDir, "")
 		client.ListenConfig(listenConfigParam)
 
-		client1 := cretateConfigClientTest()
+		client1 := createConfigClientTest()
 		client1.ListenConfig(listenConfigParam)
 
 		success, err := client.PublishConfig(vo.ConfigParam{
-			DataId:  "MultipleClients",
+			DataId:  multipleClientsKey,
 			Group:   localConfigTest.Group,
 			Content: localConfigTest.Content})
 
@@ -512,23 +537,23 @@ func TestListen(t *testing.T) {
 	t.Run("TestListenConfigWithMultipleClientsMultipleConfig", func(t *testing.T) {
 		ch := make(chan string)
 		listenConfigParam := vo.ConfigParam{
-			DataId: "MultipleClientsMultipleConfig",
+			DataId: multipleClientsMultipleConfigsKey,
 			Group:  localConfigTest.Group,
 			OnChange: func(namespace, group, dataId, data string) {
 				fmt.Println("group:" + group + ", dataId:" + dataId + ", data:" + data)
 				ch <- data
 			},
 		}
-		client := cretateConfigClientTest()
+		client := createConfigClientTest()
 		key := util.GetConfigCacheKey(listenConfigParam.DataId, listenConfigParam.Group, clientConfigTest.NamespaceId)
 		cache.WriteConfigToFile(key, client.configCacheDir, "")
 		client.ListenConfig(listenConfigParam)
 
-		client1 := cretateConfigClientTest()
+		client1 := createConfigClientTest()
 		client1.ListenConfig(listenConfigParam)
 
 		success, err := client.PublishConfig(vo.ConfigParam{
-			DataId:  "MultipleClientsMultipleConfig",
+			DataId:  multipleClientsMultipleConfigsKey,
 			Group:   localConfigTest.Group,
 			Content: localConfigTest.Content})
 
@@ -549,12 +574,12 @@ func TestListen(t *testing.T) {
 func TestCancelListenConfig(t *testing.T) {
 	//Multiple listeners listen for different configurations, cancel one
 	t.Run("TestMultipleListenersCancelOne", func(t *testing.T) {
-		client := cretateConfigClientTest()
+		client := createConfigClientTest()
 		var err error
 		var success bool
 		var context string
 		listenConfigParam := vo.ConfigParam{
-			DataId: "CancelOne",
+			DataId: cancelOneKey,
 			Group:  "group",
 			OnChange: func(namespace, group, dataId, data string) {
 				fmt.Println("group:" + group + ", dataId:" + dataId + ", data:" + data)
@@ -562,7 +587,7 @@ func TestCancelListenConfig(t *testing.T) {
 		}
 
 		listenConfigParam1 := vo.ConfigParam{
-			DataId: "CancelOne1",
+			DataId: cancelOne1Key,
 			Group:  "group1",
 			OnChange: func(namespace, group, dataId, data string) {
 				fmt.Println("group1:" + group + ", dataId1:" + dataId + ", data:" + data)
@@ -581,14 +606,14 @@ func TestCancelListenConfig(t *testing.T) {
 		for i := 1; i <= 5; i++ {
 			go func() {
 				success, err = client.PublishConfig(vo.ConfigParam{
-					DataId:  "CancelOne",
+					DataId:  cancelOneKey,
 					Group:   "group",
 					Content: "abcd" + strconv.Itoa(i)})
 			}()
 
 			go func() {
 				success, err = client.PublishConfig(vo.ConfigParam{
-					DataId:  "CancelOne1",
+					DataId:  cancelOne1Key,
 					Group:   "group1",
 					Content: "abcd" + strconv.Itoa(i)})
 			}()
@@ -607,12 +632,12 @@ func TestCancelListenConfig(t *testing.T) {
 		var context string
 		var err error
 		ch := make(chan string)
-		client := cretateConfigClientTest()
+		client := createConfigClientTest()
 		//
 		key := util.GetConfigCacheKey(localConfigTest.DataId, localConfigTest.Group, clientConfigTest.NamespaceId)
 		cache.WriteConfigToFile(key, client.configCacheDir, "")
 		listenConfigParam := vo.ConfigParam{
-			DataId: "cancel_listen_config",
+			DataId: cancelListenConfigKey,
 			Group:  localConfigTest.Group,
 			OnChange: func(namespace, group, dataId, data string) {
 				fmt.Println("group:" + group + ", dataId:" + dataId + ", data:" + data)
@@ -625,7 +650,7 @@ func TestCancelListenConfig(t *testing.T) {
 			assert.Nil(t, err)
 		}()
 		success, err := client.PublishConfig(vo.ConfigParam{
-			DataId:  "cancel_listen_config",
+			DataId:  cancelListenConfigKey,
 			Group:   localConfigTest.Group,
 			Content: localConfigTest.Content})
 		assert.Nil(t, err)
@@ -639,7 +664,7 @@ func TestCancelListenConfig(t *testing.T) {
 		client.CancelListenConfig(listenConfigParam)
 
 		success, err = client.PublishConfig(vo.ConfigParam{
-			DataId:  "cancel_listen_config",
+			DataId:  cancelListenConfigKey,
 			Group:   localConfigTest.Group,
 			Content: "abcd"})
 		assert.Nil(t, err)
@@ -652,9 +677,9 @@ func TestCancelListenConfig(t *testing.T) {
 func TestGetConfigWithSpecialSymbol(t *testing.T) {
 	contentStr := "hello world!!@#$%^&&*()"
 
-	client := cretateConfigClientTest()
+	client := createConfigClientTest()
 	success, err := client.PublishConfig(vo.ConfigParam{
-		DataId:  "special_symbol",
+		DataId:  specialSymbolKey,
 		Group:   localConfigTest.Group,
 		Content: contentStr})
 
@@ -662,7 +687,7 @@ func TestGetConfigWithSpecialSymbol(t *testing.T) {
 	assert.True(t, success)
 
 	content, err := client.GetConfig(vo.ConfigParam{
-		DataId: "special_symbol",
+		DataId: specialSymbolKey,
 		Group:  localConfigTest.Group})
 
 	assert.Nil(t, err)

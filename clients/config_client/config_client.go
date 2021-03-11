@@ -18,6 +18,7 @@ package config_client
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"strconv"
@@ -147,7 +148,7 @@ func (client *ConfigClient) GetConfig(param vo.ConfigParam) (content string, err
 }
 
 func (client *ConfigClient) decrypt(dataId, content string) (string, error) {
-	if strings.HasPrefix(dataId, "cipher-") && client.kmsClient != nil {
+	if client.kmsClient != nil && strings.HasPrefix(dataId, "cipher-") {
 		request := kms.CreateDecryptRequest()
 		request.Method = "POST"
 		request.Scheme = "https"
@@ -155,11 +156,27 @@ func (client *ConfigClient) decrypt(dataId, content string) (string, error) {
 		request.CiphertextBlob = content
 		response, err := client.kmsClient.Decrypt(request)
 		if err != nil {
-			return "", errors.New("kms decrypt failed")
+			return "", fmt.Errorf("kms decrypt failed: %v", err)
 		}
 		content = response.Plaintext
 	}
+	return content, nil
+}
 
+func (client *ConfigClient) encrypt(dataId, content string) (string, error) {
+	if client.kmsClient != nil && strings.HasPrefix(dataId, "cipher-") {
+		request := kms.CreateEncryptRequest()
+		request.Method = "POST"
+		request.Scheme = "https"
+		request.AcceptFormat = "json"
+		request.KeyId = "alias/acs/acm" // use default key
+		request.Plaintext = content
+		response, err := client.kmsClient.Encrypt(request)
+		if err != nil {
+			return "", fmt.Errorf("kms encrypt failed: %v", err)
+		}
+		content = response.CiphertextBlob
+	}
 	return content, nil
 }
 
@@ -211,6 +228,11 @@ func (client *ConfigClient) PublishConfig(param vo.ConfigParam) (published bool,
 	if len(param.Content) <= 0 {
 		err = errors.New("[client.PublishConfig] param.content can not be empty")
 	}
+
+	param.Content, err = client.encrypt(param.DataId, param.Content)
+	if err != nil {
+		return false, err
+	}
 	clientConfig, _ := client.GetClientConfig()
 	return client.configProxy.PublishConfigProxy(param, clientConfig.NamespaceId, clientConfig.AccessKey, clientConfig.SecretKey)
 }
@@ -236,7 +258,7 @@ func (client *ConfigClient) CancelListenConfig(param vo.ConfigParam) (err error)
 	}
 	cacheMap.Remove(util.GetConfigCacheKey(param.DataId, param.Group, clientConfig.NamespaceId))
 	logger.Infof("Cancel listen config DataId:%s Group:%s", param.DataId, param.Group)
-	remakeId := int(math.Ceil(float64(len(cacheMap.Keys())) / float64(perTaskConfigSize)))
+	remakeId := int(math.Ceil(float64(cacheMap.Count()) / float64(perTaskConfigSize)))
 	if remakeId < currentTaskCount {
 		remakeCacheDataTaskId(remakeId)
 	}
@@ -288,7 +310,7 @@ func (client *ConfigClient) ListenConfig(param vo.ConfigParam) (err error) {
 		)
 		content, fileErr := cache.ReadConfigFromFile(key, client.configCacheDir)
 		if fileErr != nil {
-			logger.Errorf("[cache.ReadConfigFromFile] error: %+v", err)
+			logger.Errorf("[cache.ReadConfigFromFile] error: %+v", fileErr)
 		}
 		if len(content) > 0 {
 			md5Str = util.Md5(content)
@@ -306,7 +328,7 @@ func (client *ConfigClient) ListenConfig(param vo.ConfigParam) (err error) {
 			content:           content,
 			md5:               md5Str,
 			cacheDataListener: listener,
-			taskId:            len(cacheMap.Keys()) / perTaskConfigSize,
+			taskId:            cacheMap.Count() / perTaskConfigSize,
 			configClient:      client,
 		}
 	}
@@ -336,7 +358,7 @@ func delayScheduler(t *time.Timer, delay time.Duration, taskId string, execute f
 //Listen for the configuration executor
 func listenConfigExecutor() func() error {
 	return func() error {
-		listenerSize := len(cacheMap.Keys())
+		listenerSize := cacheMap.Count()
 		taskCount := int(math.Ceil(float64(listenerSize) / float64(perTaskConfigSize)))
 
 		if taskCount > currentTaskCount {
@@ -455,6 +477,42 @@ func (client *ConfigClient) buildBasePath(serverConfig constant.ServerConfig) (b
 
 func (client *ConfigClient) SearchConfig(param vo.SearchConfigParm) (*model.ConfigPage, error) {
 	return client.searchConfigInner(param)
+}
+
+func (client *ConfigClient) PublishAggr(param vo.ConfigParam) (published bool,
+	err error) {
+	if len(param.DataId) <= 0 {
+		err = errors.New("[client.PublishAggr] param.dataId can not be empty")
+	}
+	if len(param.Group) <= 0 {
+		err = errors.New("[client.PublishAggr] param.group can not be empty")
+	}
+	if len(param.Content) <= 0 {
+		err = errors.New("[client.PublishAggr] param.content can not be empty")
+	}
+	if len(param.DatumId) <= 0 {
+		err = errors.New("[client.PublishAggr] param.DatumId can not be empty")
+	}
+	clientConfig, _ := client.GetClientConfig()
+	return client.configProxy.PublishAggProxy(param, clientConfig.NamespaceId, clientConfig.AccessKey, clientConfig.SecretKey)
+}
+
+func (client *ConfigClient) RemoveAggr(param vo.ConfigParam) (published bool,
+	err error) {
+	if len(param.DataId) <= 0 {
+		err = errors.New("[client.DeleteAggr] param.dataId can not be empty")
+	}
+	if len(param.Group) <= 0 {
+		err = errors.New("[client.DeleteAggr] param.group can not be empty")
+	}
+	if len(param.Content) <= 0 {
+		err = errors.New("[client.DeleteAggr] param.content can not be empty")
+	}
+	if len(param.DatumId) <= 0 {
+		err = errors.New("[client.DeleteAggr] param.DatumId can not be empty")
+	}
+	clientConfig, _ := client.GetClientConfig()
+	return client.configProxy.DeleteAggProxy(param, clientConfig.NamespaceId, clientConfig.AccessKey, clientConfig.SecretKey)
 }
 
 func (client *ConfigClient) searchConfigInner(param vo.SearchConfigParm) (*model.ConfigPage, error) {

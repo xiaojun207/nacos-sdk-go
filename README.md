@@ -25,11 +25,12 @@ $ go get -u github.com/nacos-group/nacos-sdk-go
 constant.ClientConfig{
 	TimeoutMs            uint64 // timeout for requesting Nacos server, default value is 10000ms
 	NamespaceId          string // the namespaceId of Nacos
-	Endpoint             string // the endpoint for get Nacos server addresses
-	RegionId             string // the regionId for kms
-	AccessKey            string // the AccessKey for kms
-	SecretKey            string // the SecretKey for kms
-	OpenKMS              bool   // it's to open kms,default is false. https://help.aliyun.com/product/28933.html
+	Endpoint             string // the endpoint for ACM. https://help.aliyun.com/document_detail/130146.html
+	RegionId             string // the regionId for ACM & KMS
+	AccessKey            string // the AccessKey for ACM & KMS
+	SecretKey            string // the SecretKey for ACM & KMS
+	OpenKMS              bool   // it's to open KMS, default is false. https://help.aliyun.com/product/28933.html
+	                            // , to enable encrypt/decrypt, DataId should be start with "cipher-"
 	CacheDir             string // the directory for persist nacos service info,default value is current path
 	UpdateThreadNum      int    // the number of goroutine for update nacos service info,default value is 20
 	NotLoadCacheAtStart  bool   // not to load persistent nacos service info in CacheDir at start time
@@ -44,13 +45,14 @@ constant.ClientConfig{
 ```
 
 
-* ServerConfig 
+* ServerConfig
 
 ```go
 constant.ServerConfig{
 	ContextPath string // the nacos server context path
 	IpAddr      string // the nacos server address
 	Port        uint64 // the nacos server port
+	Scheme      string // the nacos server scheme
 }
 ```
 
@@ -59,6 +61,7 @@ constant.ServerConfig{
 ### Create client
 
 ```go
+//create clientConfig
 clientConfig := constant.ClientConfig{
 	NamespaceId:         "e525eafa-f7d7-4029-83d9-008937f9d468", //we can create multiple clients with different namespaceId to support multiple namespace
 	TimeoutMs:           5000,
@@ -68,39 +71,106 @@ clientConfig := constant.ClientConfig{
 	RotateTime:          "1h",
 	MaxAge:              3,
 	LogLevel:            "debug",
-} 
+}
+//Another way of create clientConfig
+clientConfig := *constant.NewClientConfig(
+    constant.WithNamespaceId("e525eafa-f7d7-4029-83d9-008937f9d468"),
+    constant.WithTimeoutMs(5000),
+    constant.WithNotLoadCacheAtStart(true),
+    constant.WithLogDir("/tmp/nacos/log"),
+    constant.WithCacheDir("/tmp/nacos/cache"),
+    constant.WithRotateTime("1h"),
+    constant.WithMaxAge(3),
+    constant.WithLogLevel("debug"),
+)
 
-// At least one ServerConfig 
+// At least one ServerConfig
 serverConfigs := []constant.ServerConfig{
     {
         IpAddr:      "console1.nacos.io",
         ContextPath: "/nacos",
         Port:        80,
+        Scheme:      "http",
     },
     {
     	IpAddr:      "console2.nacos.io",
     	ContextPath: "/nacos",
     	Port:        80,
+        Scheme:      "http",
     },
+}
+//Another way of create serverConfigs
+serverConfigs := []constant.ServerConfig{
+    *constant.NewServerConfig(
+        "console1.nacos.io",
+        80,
+        constant.WithScheme("http"),
+        constant.WithContextPath("/nacos")
+    ),
+    *constant.NewServerConfig(
+        "console2.nacos.io",
+        80,
+        constant.WithScheme("http"),
+        constant.WithContextPath("/nacos")
+    ),
 }
 
 // Create naming client for service discovery
-namingClient, err := clients.CreateNamingClient(map[string]interface{}{
+_, _ := clients.CreateNamingClient(map[string]interface{}{
 	"serverConfigs": serverConfigs,
 	"clientConfig":  clientConfig,
 })
 
 // Create config client for dynamic configuration
-configClient, err := clients.CreateConfigClient(map[string]interface{}{
+_, _ := clients.CreateConfigClient(map[string]interface{}{
 	"serverConfigs": serverConfigs,
 	"clientConfig":  clientConfig,
 })
-    
+
+// Another way of create naming client for service discovery (recommend)
+namingClient, err := clients.NewNamingClient(
+    vo.NacosClientParam{
+        ClientConfig:  &clientConfig,
+        ServerConfigs: serverConfigs,
+    },
+)
+
+// Another way of create config client for dynamic configuration (recommend)
+configClient, err := clients.NewConfigClient(
+    vo.NacosClientParam{
+        ClientConfig:  &clientConfig,
+        ServerConfigs: serverConfigs,
+    },
+)
+
+```
+
+### Create client for ACM
+https://help.aliyun.com/document_detail/130146.html
+
+```go
+cc := constant.ClientConfig{
+  Endpoint:    "acm.aliyun.com:8080",
+  NamespaceId: "e525eafa-f7d7-4029-83d9-008937f9d468",
+  RegionId:    "cn-shanghai",
+  AccessKey:   "LTAI4G8KxxxxxxxxxxxxxbwZLBr",
+  SecretKey:   "n5jTL9YxxxxxxxxxxxxaxmPLZV9",
+  OpenKMS:     true,
+  TimeoutMs:   5000,
+  LogLevel:    "debug",
+}
+
+// a more graceful way to create config client
+client, err := clients.NewConfigClient(
+  vo.NacosClientParam{
+    ClientConfig: &cc,
+  },
+)
 ```
 
 
 ### Service Discovery
-    
+
 * Register instance：RegisterInstance
 
 ```go
@@ -119,7 +189,7 @@ success, err := namingClient.RegisterInstance(vo.RegisterInstanceParam{
 })
 
 ```
-  
+
 * Deregister instance：DeregisterInstance
 
 ```go
@@ -134,7 +204,7 @@ success, err := namingClient.DeregisterInstance(vo.DeregisterInstanceParam{
 })
 
 ```
-  
+
 * Get service：GetService
 
 ```go
@@ -158,7 +228,7 @@ instances, err := namingClient.SelectAllInstances(vo.SelectAllInstancesParam{
 })
 
 ```
- 
+
 * Get instances ：SelectInstances
 
 ```go
@@ -309,7 +379,7 @@ You can view the full documentation from the [Nacos website](https://nacos.io/en
 Contributors are welcomed to join Nacos-sdk-go project. Please check [CONTRIBUTING.md](./CONTRIBUTING.md) about how to contribute to this project.
 
 ## Contact
-* Join us from DingDing Group(23191211). 
+* Join us from DingDing Group(23191211).
 * [Gitter](https://gitter.im/alibaba/nacos): Nacos's IM tool for community messaging, collaboration and discovery.
 * [Twitter](https://twitter.com/nacos2): Follow along for latest nacos news on Twitter.
 * [Weibo](https://weibo.com/u/6574374908): Follow along for latest nacos news on Weibo (Twitter of China version).

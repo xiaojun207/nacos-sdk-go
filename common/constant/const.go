@@ -44,6 +44,7 @@ const (
 	WEB_CONTEXT                 = "/nacos"
 	CONFIG_BASE_PATH            = "/v1/cs"
 	CONFIG_PATH                 = CONFIG_BASE_PATH + "/configs"
+	CONFIG_AGG_PATH             = "/datum.do"
 	CONFIG_LISTEN_PATH          = CONFIG_BASE_PATH + "/configs/listener"
 	SERVICE_BASE_PATH           = "/v1/ns"
 	SERVICE_PATH                = SERVICE_BASE_PATH + "/instance"
@@ -65,7 +66,7 @@ const (
 	KEY_BEAT                    = "beat"
 	KEY_DOM                     = "dom"
 	DEFAULT_CONTEXT_PATH        = "/nacos"
-	CLIENT_VERSION              = "Nacos-go-Client:v1.0.1"
+	CLIENT_VERSION              = "Nacos-Go-Client:v1.0.1"
 	REQUEST_DOMAIN_RETRY_TIME   = 3
 	SERVICE_INFO_SPLITER        = "@@"
 	CONFIG_INFO_SPLITER         = "@@"
@@ -73,4 +74,5 @@ const (
 	DEFAULT_GROUP               = "DEFAULT_GROUP"
 	NAMING_INSTANCE_ID_SPLITTER = "#"
 	DefaultClientErrorCode      = "SDK.NacosError"
+	DEFAULT_SERVER_SCHEME       = "http"
 )

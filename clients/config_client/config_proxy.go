@@ -33,7 +33,7 @@ import (
 )
 
 type ConfigProxy struct {
-	nacosServer  nacos_server.NacosServer
+	nacosServer  *nacos_server.NacosServer
 	clientConfig constant.ClientConfig
 }
 
@@ -107,6 +107,38 @@ func (cp *ConfigProxy) PublishConfigProxy(param vo.ConfigParam, tenant, accessKe
 	} else {
 		return false, errors.New("[client.PublishConfig] publish config failed:" + result)
 	}
+}
+
+func (cp *ConfigProxy) PublishAggProxy(param vo.ConfigParam, tenant, accessKey, secretKey string) (bool, error) {
+	params := util.TransformObject2Param(param)
+	if len(tenant) > 0 {
+		params["tenant"] = tenant
+	}
+	params["method"] = "addDatum"
+	var headers = map[string]string{}
+	headers["accessKey"] = accessKey
+	headers["secretKey"] = secretKey
+	_, err := cp.nacosServer.ReqConfigApi(constant.CONFIG_AGG_PATH, params, headers, http.MethodPost, cp.clientConfig.TimeoutMs)
+	if err != nil {
+		return false, errors.New("[client.PublishAggProxy] publish agg failed:" + err.Error())
+	}
+	return true, nil
+}
+
+func (cp *ConfigProxy) DeleteAggProxy(param vo.ConfigParam, tenant, accessKey, secretKey string) (bool, error) {
+	params := util.TransformObject2Param(param)
+	if len(tenant) > 0 {
+		params["tenant"] = tenant
+	}
+	params["method"] = "deleteDatum"
+	var headers = map[string]string{}
+	headers["accessKey"] = accessKey
+	headers["secretKey"] = secretKey
+	_, err := cp.nacosServer.ReqConfigApi(constant.CONFIG_AGG_PATH, params, headers, http.MethodPost, cp.clientConfig.TimeoutMs)
+	if err != nil {
+		return false, errors.New("[client.DeleteAggProxy] delete agg failed:" + err.Error())
+	}
+	return true, nil
 }
 
 func (cp *ConfigProxy) DeleteConfigProxy(param vo.ConfigParam, tenant, accessKey, secretKey string) (bool, error) {
